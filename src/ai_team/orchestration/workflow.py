@@ -42,6 +42,7 @@ from ai_team.tools.filesystem import FilesystemTools
 from ai_team.tools.git import GitTools
 from ai_team.tools.registry import ToolRegistry
 from ai_team.tools.shell import ShellError, ShellTools
+from ai_team.tools.web import WebSearchTools
 from ai_team.tracing.audit import Tracer
 
 
@@ -77,7 +78,12 @@ class TeamRuntime:
         self.fs = FilesystemTools(self.root)
         self.git = GitTools(self.root)
         self.shell = ShellTools(self.root)
-        self.tools = ToolRegistry(self.fs, self.git, self.shell)
+        self.web = WebSearchTools(
+            enabled=self.settings.web_search_enabled,
+            backend=self.settings.web_search_backend,
+            max_results=self.settings.web_search_max_results,
+        )
+        self.tools = ToolRegistry(self.fs, self.git, self.shell, web=self.web)
         if auto_approve:
             auto_moderate = True
             auto_dangerous = True
@@ -349,6 +355,33 @@ class TeamRuntime:
             "markdown": markdown,
         }
 
+    def _web_evidence(self, query: str, tracer: Tracer | None = None) -> list[dict[str, str]]:
+        if not self.settings.web_search_enabled:
+            return []
+        hits = self.web.search(query)
+        if tracer is not None:
+            tracer.emit(
+                "tool_call",
+                actor="researcher",
+                payload={
+                    "tool": "web_search",
+                    "query": query,
+                    "backend": self.web.backend,
+                    "hits": hits,
+                },
+            )
+            record_tool_call(
+                self.db,
+                tracer.session_id,
+                "researcher",
+                "web_search",
+                {"query": query, "max_results": self.settings.web_search_max_results},
+                str(hits)[:20_000],
+                RiskLevel.SAFE,
+                True,
+            )
+        return hits
+
     async def ask(self, request: str) -> WorkflowResult:
         session = self.sessions.start(self.project_row.id, kind="ask")
         tracer = Tracer(self.db, session.id)
@@ -356,7 +389,13 @@ class TeamRuntime:
         context = self.context.build(request)
         plan = await self.manager.plan(request, context, tracer)
         architect = await self.architect.run(request, context, tracer)
-        research = await self.researcher.run(request, context, tracer)
+        web_hits = self._web_evidence(request, tracer)
+        research = await self.researcher.run(
+            request,
+            context,
+            tracer,
+            extra={"web_search": web_hits, "web_evidence": self.web.format_evidence(web_hits)},
+        )
         decision = await self.manager.decide(
             request,
             context,
@@ -384,6 +423,7 @@ class TeamRuntime:
                 "plan": plan.model_dump(),
                 "architect": architect.model_dump(),
                 "research": research.model_dump(),
+                "web_search": web_hits,
                 "decision": decision.model_dump(),
             },
         )
@@ -392,9 +432,21 @@ class TeamRuntime:
         session = self.sessions.start(self.project_row.id, kind="research")
         tracer = Tracer(self.db, session.id)
         context = self.context.build(topic)
-        finding = await self.researcher.run(topic, context, tracer)
+        web_hits = self._web_evidence(topic, tracer)
+        finding = await self.researcher.run(
+            topic,
+            context,
+            tracer,
+            extra={"web_search": web_hits, "web_evidence": self.web.format_evidence(web_hits)},
+        )
         self.sessions.finish(session.id)
-        return WorkflowResult(True, "", session.id, finding.recommendation, finding.model_dump())
+        return WorkflowResult(
+            True,
+            "",
+            session.id,
+            finding.recommendation,
+            {**finding.model_dump(), "web_search": web_hits},
+        )
 
     async def debate(self, question: str, force: bool = True) -> WorkflowResult:
         session = self.sessions.start(self.project_row.id, kind="debate")
@@ -444,7 +496,13 @@ class TeamRuntime:
         context = self.context.build(request)
         manager_plan = await self.manager.plan(request, context, tracer)
         architect = await self.architect.run(request, context, tracer)
-        research = await self.researcher.run(request, context, tracer)
+        web_hits = self._web_evidence(request, tracer)
+        research = await self.researcher.run(
+            request,
+            context,
+            tracer,
+            extra={"web_search": web_hits, "web_evidence": self.web.format_evidence(web_hits)},
+        )
         proposals, verdict, ran = await self.debate_engine.debate(
             [self.architect, self.researcher],
             request,
@@ -496,6 +554,7 @@ class TeamRuntime:
                 "manager_plan": manager_plan.model_dump(),
                 "architect": architect.model_dump(),
                 "research": research.model_dump(),
+                "web_search": web_hits,
                 "debate": verdict.model_dump() if verdict else None,
                 "debated": ran,
                 "redteam": red.model_dump(),

@@ -1,4 +1,4 @@
-"""MCP-style tool registry used by agents. V1: filesystem, git, shell."""
+"""MCP-style tool registry used by agents. V1: filesystem, git, shell (+ optional web)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from ai_team.tools.docker import DockerTools
 from ai_team.tools.filesystem import FilesystemTools
 from ai_team.tools.git import GitTools
 from ai_team.tools.shell import ShellTools
+from ai_team.tools.web import WebSearchTools
 
 
 @dataclass
@@ -28,11 +29,13 @@ class ToolRegistry:
         git: GitTools,
         shell: ShellTools,
         docker: DockerTools | None = None,
+        web: WebSearchTools | None = None,
     ) -> None:
         self.fs = fs
         self.git = git
         self.shell = shell
         self.docker = docker
+        self.web = web
         self._tools: dict[str, ToolSpec] = {}
         self._register_v1()
 
@@ -85,6 +88,13 @@ class ToolRegistry:
                 "Run a docker CLI command.",
                 lambda command: self.docker.run(command),
                 {"command": "string"},
+            )
+        if self.web is not None and self.web.enabled:
+            self.register(
+                "web_search",
+                "Search the public web for research evidence. Returns title, url, snippet.",
+                lambda query, max_results=5: self.web.search(query, max_results=max_results),
+                {"query": "string", "max_results": "integer"},
             )
 
     def register(self, name: str, description: str, handler: Callable[..., Any], schema: dict[str, Any]) -> None:

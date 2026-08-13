@@ -39,8 +39,8 @@ V1 **đã implement và có test**. Hardening tiếp theo (config.yaml, provider
 | `cost_usd` từ token + bảng giá | Xong |
 | API `GET/POST /approvals` + `/sessions/{id}/cost` | Xong |
 | Replay session | Xong (`ai-team replay`, `GET /sessions/{id}/replay`) |
-| Researcher web search | Chưa |
-| Web UI, vector DB, MCP V2/V3, 8 role sau V1 | Chưa |
+| Researcher web search | Xong (`web_search` tool + DuckDuckGo/mock) |
+| Web UI, vector DB, MCP V2 GitHub/Postgres, 8 role sau V1 | Chưa |
 | Routing đa model + cost optimization | Chưa |
 
 ---
@@ -92,7 +92,7 @@ src/ai_team/
   models/{openai,anthropic,google,openrouter,mock}.py
   memory/                      SQLite + .ai markdown
   context/engine.py            retrieval keyword, không vector
-  tools/                       fs, git, shell, docker
+  tools/                       fs, git, shell, docker, web
   mcp/server.py                MCP JSON-RPC stdio
   security/permissions.py      SAFE / MODERATE / DANGEROUS
   security/approvals.py        gate + CLI [y/N]
@@ -140,7 +140,7 @@ Làm tiếp theo thứ tự plan: **không** nhảy UI nếu owner chưa yêu c�
 3. ~~Tính `cost_usd` thật~~ — xong (`models/pricing.py` + trace)
 4. ~~API approval~~ — xong (`GET/POST /approvals/{id}`, defer mode)
 5. ~~Replay session~~ — xong (`ai-team replay`, `GET /sessions/{id}/replay`)
-6. **Researcher web search** — MCP V2 `web`; hiện chỉ local context.
+6. ~~Researcher web search~~ — xong (`tools/web.py`, MCP `web_search`, backend duckduckgo/mock/off)
 
 Sau V1 (plan):
 
@@ -171,7 +171,7 @@ Sau V1 (plan):
 
 - Anthropic/Google/OpenRouter mới test qua adapter HTTP, **chưa có integration test live**.
 - Mock Coder luôn tạo `src/{auth|queue|feature}.py` + test `ping()` — đủ cho CI, không phản ánh coder LLM thật.
-- `Researcher` không search web.
+- `Researcher` có `web_search` (DuckDuckGo HTML, không cần key); offline thì degrade về `[]` / backend `mock|off`.
 - Approval interactive cần TTY; CI phải `--yes` hoặc `AI_TEAM_AUTO_APPROVE_*`. API dùng `defer` + `POST /approvals/{id}`.
 - Bảng giá `cost_usd` là ước lượng (per 1M tokens), không phải invoice provider.
 - Docker tool = `docker …` qua shell, profile `mcp` tách container stdio.

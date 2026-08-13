@@ -14,12 +14,15 @@ from ai_team.tools.registry import ToolRegistry
 from ai_team.tools.shell import ShellTools
 
 
-def build_registry(root: Path) -> ToolRegistry:
+def build_registry(root: Path, web_enabled: bool = True, web_backend: str = "duckduckgo") -> ToolRegistry:
+    from ai_team.tools.web import WebSearchTools
+
     return ToolRegistry(
         fs=FilesystemTools(root),
         git=GitTools(root),
         shell=ShellTools(root),
         docker=DockerTools(root),
+        web=WebSearchTools(enabled=web_enabled, backend=web_backend),
     )
 
 
@@ -76,7 +79,14 @@ def handle(registry: ToolRegistry, message: dict[str, Any]) -> dict[str, Any] | 
 
 
 def serve_stdio(root: Path | None = None) -> None:
-    registry = build_registry(Path(root or ".").resolve())
+    from ai_team.config import load_settings
+
+    settings = load_settings()
+    registry = build_registry(
+        Path(root or ".").resolve(),
+        web_enabled=settings.web_search_enabled,
+        web_backend=settings.web_search_backend,
+    )
     for line in sys.stdin:
         line = line.strip()
         if not line:

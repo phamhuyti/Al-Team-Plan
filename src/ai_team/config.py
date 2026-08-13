@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     git_auto_commit: bool = True
     git_auto_push: bool = False
 
+    web_search_enabled: bool = True
+    web_search_backend: Literal["duckduckgo", "mock", "off"] = "duckduckgo"
+    web_search_max_results: int = 5
+
     # Raw project config snapshot (not from env).
     project_config: dict[str, Any] = Field(default_factory=dict)
 
@@ -181,6 +185,20 @@ def apply_project_config(settings: Settings, root: Path) -> Settings:
             updates["git_auto_commit"] = bool(git["auto_commit"])
         if "auto_push" in git:
             updates["git_auto_push"] = bool(git["auto_push"])
+
+    web = raw.get("web") or raw.get("web_search") or {}
+    if isinstance(web, dict):
+        if "enabled" in web and not _env_set("AI_TEAM_WEB_SEARCH_ENABLED"):
+            updates["web_search_enabled"] = bool(web["enabled"])
+        if web.get("backend") and not _env_set("AI_TEAM_WEB_SEARCH_BACKEND"):
+            backend = str(web["backend"]).lower()
+            if backend in {"duckduckgo", "mock", "off"}:
+                updates["web_search_backend"] = backend
+        if web.get("max_results") is not None and not _env_set("AI_TEAM_WEB_SEARCH_MAX_RESULTS"):
+            try:
+                updates["web_search_max_results"] = int(web["max_results"])
+            except (TypeError, ValueError):
+                pass
 
     return settings.model_copy(update=updates)
 

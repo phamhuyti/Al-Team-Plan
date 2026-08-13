@@ -14,5 +14,6 @@ Produce:
 Rules:
 - Distinguish facts from speculation.
 - Prefer evidence that matches this project's constraints.
-- If you lack live web access, reason from provided context and well-established knowledge.
+- When `web_search` results are provided, cite them in `evidence` (title + url) and do not invent URLs.
+- If web search is empty or unavailable, reason from provided local context and well-established knowledge; say so in `uncertainties`.
 - Do not oversell a tool because it is fashionable.

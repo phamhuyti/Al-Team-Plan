@@ -94,7 +94,7 @@ AI_TEAM_PROVIDER=mock ai-team implement TASK-001 --yes
 | `ai-team status` | Tasks, agents, sessions |
 | `ai-team replay SESSION_ID` | Xem lại timeline / cost của session |
 | `ai-team serve` | HTTP API (`:8080`) |
-| `ai-team mcp` | MCP stdio (filesystem, git, shell) |
+| `ai-team mcp` | MCP stdio (filesystem, git, shell, web_search) |
 
 Ví dụ:
 
@@ -137,6 +137,8 @@ ai-team serve
 `POST /approvals/{id}` body: `{"approved": true, "reason": ""}`. Khi chạy task với `"yes": false`, hành động DANGEROUS tạo approval `pending` — approve rồi chạy lại.
 
 Mỗi project có thể ghi đè provider/model theo role trong `.ai/config.yaml` (ưu tiên sau env role-specific như `AI_TEAM_CODER_PROVIDER`).
+
+Researcher có thể gọi `web_search` (DuckDuckGo, không cần API key). Tắt bằng `AI_TEAM_WEB_SEARCH_ENABLED=false` hoặc `backend: off` trong `.ai/config.yaml`. CI/demo dùng `AI_TEAM_WEB_SEARCH_BACKEND=mock`.
 
 Web UI **không** nằm trong V1.
 

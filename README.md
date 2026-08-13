@@ -327,3 +327,7 @@ pytest -q
 ## License
 
 MIT
+
+## Handoff cho agent/dev tiếp theo
+
+Xem [HANDOFF.md](HANDOFF.md): trạng thái V1, bản đồ code, việc còn đọng, cách chạy và quyết định kỹ thuật đã chốt.

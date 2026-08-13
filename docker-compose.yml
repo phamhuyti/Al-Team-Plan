@@ -1,0 +1,38 @@
+services:
+  ai-orchestrator:
+    build: .
+    image: ai-team:v1
+    container_name: ai-orchestrator
+    working_dir: /workspace
+    entrypoint: ["ai-team"]
+    command: ["serve", "--host", "0.0.0.0", "--port", "8080"]
+    env_file:
+      - .env
+    environment:
+      AI_TEAM_PROJECTS_ROOT: /app/projects
+      AI_TEAM_DATABASE_URL: sqlite:////app/data/ai-team.db
+    volumes:
+      - ./projects:/app/projects
+      - ai-team-data:/app/data
+      - ${PROJECT_WORKSPACE:-./projects}:/workspace
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  ai-mcp:
+    build: .
+    image: ai-team:v1
+    container_name: ai-mcp
+    working_dir: /workspace
+    entrypoint: ["ai-team"]
+    command: ["mcp"]
+    env_file:
+      - .env
+    volumes:
+      - ${PROJECT_WORKSPACE:-./projects}:/workspace
+    restart: unless-stopped
+    profiles:
+      - mcp
+
+volumes:
+  ai-team-data:

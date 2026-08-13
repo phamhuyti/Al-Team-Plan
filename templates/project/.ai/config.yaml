@@ -1,0 +1,28 @@
+agents:
+  manager:
+    provider: openai
+    model: gpt-4o
+  architect:
+    provider: openai
+    model: gpt-4o
+  researcher:
+    provider: openai
+    model: gpt-4o
+  coder:
+    provider: openai
+    model: gpt-4o
+  reviewer:
+    provider: openai
+    model: gpt-4o
+  redteam:
+    provider: openai
+    model: gpt-4o
+
+permissions:
+  auto_approve_moderate: false
+  auto_approve_dangerous: false
+
+git:
+  branch_prefix: ai/
+  auto_commit: true
+  auto_push: false

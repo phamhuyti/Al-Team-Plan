@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ai_team.config import Settings, load_settings
 from ai_team.orchestration.workflow import TeamRuntime, init_project
+from ai_team.security.approvals import ApprovalPending
 
 
 class ProjectCreate(BaseModel):
@@ -29,13 +30,23 @@ class RunBody(BaseModel):
     yes: bool = True
 
 
+class ApprovalDecision(BaseModel):
+    approved: bool = True
+    reason: str = ""
+
+
 def create_app(root: Path | None = None, settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     default_root = (root or Path.cwd()).resolve()
     app = FastAPI(title="AI-Team", version="0.1.0")
 
     def runtime(path: Path | None = None, yes: bool = True) -> TeamRuntime:
-        return TeamRuntime(path or default_root, settings=settings, auto_approve=yes)
+        return TeamRuntime(
+            path or default_root,
+            settings=settings,
+            auto_approve=yes,
+            defer_approvals=not yes,
+        )
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -50,7 +61,11 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
     @app.get("/projects")
     def list_projects() -> dict[str, Any]:
         rt = runtime()
-        return {"current": str(rt.root), "id": rt.project_row.id}
+        return {
+            "current": str(rt.root),
+            "id": rt.project_row.id,
+            "config": rt.settings.project_config,
+        }
 
     @app.post("/tasks")
     def create_task(body: TaskCreate) -> dict[str, Any]:
@@ -74,15 +89,36 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
     @app.post("/tasks/{task_key}/run")
     async def run_task(task_key: str, body: RunBody) -> dict[str, Any]:
         rt = runtime(yes=body.yes)
-        if body.command == "implement":
-            result = await rt.implement(task_key)
-        elif body.command == "review":
-            result = await rt.review_task(task_key)
-        elif body.command == "plan":
-            result = await rt.plan(body.prompt or task_key)
-        else:
-            raise HTTPException(400, f"Unsupported command {body.command}")
-        return {"ok": result.ok, "summary": result.summary, "details": result.details, "session_id": result.session_id}
+        try:
+            if body.command == "implement":
+                result = await rt.implement(task_key)
+            elif body.command == "review":
+                result = await rt.review_task(task_key)
+            elif body.command == "plan":
+                result = await rt.plan(body.prompt or task_key)
+            else:
+                raise HTTPException(400, f"Unsupported command {body.command}")
+        except ApprovalPending as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "needs_approval": True,
+                    "approval_id": exc.approval.id,
+                    "action": exc.approval.action,
+                    "risk_level": exc.approval.risk_level,
+                    "status": exc.approval.status,
+                },
+            ) from exc
+        payload = {
+            "ok": result.ok,
+            "summary": result.summary,
+            "details": result.details,
+            "session_id": result.session_id,
+        }
+        if result.details.get("pending_approval"):
+            payload["needs_approval"] = True
+            payload["approval_id"] = result.details["pending_approval"]["id"]
+        return payload
 
     @app.post("/tasks/{task_key}/debate")
     async def debate_task(task_key: str, body: RunBody) -> dict[str, Any]:
@@ -101,6 +137,38 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
     @app.get("/decisions")
     def decisions() -> list[dict[str, Any]]:
         return runtime().list_decisions()
+
+    @app.get("/approvals")
+    def approvals(status: str | None = Query(default=None)) -> list[dict[str, Any]]:
+        return runtime().list_approvals(status=status)
+
+    @app.get("/approvals/{approval_id}")
+    def get_approval(approval_id: int) -> dict[str, Any]:
+        rt = runtime()
+        row = rt.gate.get_approval(approval_id)
+        if row is None:
+            raise HTTPException(404, f"Unknown approval {approval_id}")
+        return {
+            "id": row.id,
+            "action": row.action,
+            "risk_level": row.risk_level,
+            "status": row.status,
+            "requested_by": row.requested_by,
+            "decided_by": row.decided_by,
+            "reason": row.reason,
+            "tool_call_id": row.tool_call_id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+
+    @app.post("/approvals/{approval_id}")
+    def decide_approval(approval_id: int, body: ApprovalDecision) -> dict[str, Any]:
+        rt = runtime(yes=False)
+        try:
+            return rt.resolve_approval(approval_id, approved=body.approved, reason=body.reason)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.get("/sessions/{session_id}/traces")
     def traces(session_id: int) -> list[dict[str, Any]]:
@@ -121,10 +189,15 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
                     "actor": row.actor,
                     "tokens_in": row.tokens_in,
                     "tokens_out": row.tokens_out,
+                    "cost_usd": row.cost_usd,
                     "payload": row.payload,
                     "created_at": row.created_at.isoformat() if row.created_at else None,
                 }
                 for row in rows
             ]
+
+    @app.get("/sessions/{session_id}/cost")
+    def session_cost(session_id: int) -> dict[str, Any]:
+        return runtime().session_cost(session_id)
 
     return app

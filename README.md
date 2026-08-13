@@ -126,7 +126,15 @@ ai-team serve
 | `GET` | `/agents` |
 | `GET` | `/sessions` |
 | `GET` | `/sessions/{id}/traces` |
+| `GET` | `/sessions/{id}/cost` |
+| `GET` | `/approvals` |
+| `GET` | `/approvals/{id}` |
+| `POST` | `/approvals/{id}` |
 | `GET` | `/decisions` |
+
+`POST /approvals/{id}` body: `{"approved": true, "reason": ""}`. Khi chạy task với `"yes": false`, hành động DANGEROUS tạo approval `pending` — approve rồi chạy lại.
+
+Mỗi project có thể ghi đè provider/model theo role trong `.ai/config.yaml` (ưu tiên sau env role-specific như `AI_TEAM_CODER_PROVIDER`).
 
 Web UI **không** nằm trong V1.
 

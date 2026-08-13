@@ -20,7 +20,7 @@ from ai_team.agents.manager import ManagerAgent
 from ai_team.agents.redteam import RedTeamAgent
 from ai_team.agents.researcher import ResearcherAgent
 from ai_team.agents.reviewer import ReviewerAgent
-from ai_team.config import Settings, load_settings
+from ai_team.config import Settings, apply_project_config, load_settings
 from ai_team.context.engine import ContextEngine
 from ai_team.memory.database import (
     AgentRecord,
@@ -36,7 +36,7 @@ from ai_team.memory.sessions import SessionStore
 from ai_team.models.factory import build_provider
 from ai_team.orchestration.debate import DebateEngine
 from ai_team.orchestration.judge import JudgeAgent
-from ai_team.security.approvals import ApprovalDenied, ApprovalGate, record_tool_call
+from ai_team.security.approvals import ApprovalDenied, ApprovalGate, ApprovalPending, record_tool_call
 from ai_team.security.permissions import RiskLevel, classify_filesystem
 from ai_team.tools.filesystem import FilesystemTools
 from ai_team.tools.git import GitTools
@@ -55,9 +55,16 @@ class WorkflowResult:
 
 
 class TeamRuntime:
-    def __init__(self, root: Path, settings: Settings | None = None, auto_approve: bool = False) -> None:
+    def __init__(
+        self,
+        root: Path,
+        settings: Settings | None = None,
+        auto_approve: bool = False,
+        defer_approvals: bool = False,
+    ) -> None:
         self.root = Path(root).resolve()
-        self.settings = settings or load_settings()
+        base = settings or load_settings()
+        self.settings = apply_project_config(base, self.root)
         self.memory = ProjectMemory(self.root)
         db_url = self._db_url()
         ensure_sqlite_parent(db_url)
@@ -75,6 +82,7 @@ class TeamRuntime:
             self.db,
             auto_moderate=auto_approve or self.settings.auto_approve_moderate,
             auto_dangerous=auto_approve or self.settings.auto_approve_dangerous,
+            defer=defer_approvals and not auto_approve,
         )
         extra = {
             role: self.memory.read(f"agents/{role}.md")
@@ -99,26 +107,31 @@ class TeamRuntime:
 
     def _seed_agents(self) -> None:
         with self.db.session() as s:
-            existing = {row.name for row in s.query(AgentRecord).all()}
             for role in ("manager", "architect", "researcher", "coder", "reviewer", "redteam"):
-                if role in existing:
-                    continue
-                s.add(
-                    AgentRecord(
-                        name=role,
-                        role=role,
-                        provider=self.settings.effective_provider(),
-                        model=self.settings.model_for_role(role),
-                    )
-                )
+                provider = self.settings.provider_for_role(role)
+                model = self.settings.model_for_role(role)
+                row = s.query(AgentRecord).filter(AgentRecord.name == role).one_or_none()
+                if row is None:
+                    s.add(AgentRecord(name=role, role=role, provider=provider, model=model))
+                else:
+                    row.provider = provider
+                    row.model = model
             s.commit()
 
     def _ensure_project(self) -> Project:
         with self.db.session() as s:
             row = s.query(Project).filter(Project.path == str(self.root)).one_or_none()
             if row is None:
-                row = Project(name=self.root.name, path=str(self.root), config_json={})
+                row = Project(
+                    name=self.root.name,
+                    path=str(self.root),
+                    config_json=dict(self.settings.project_config or {}),
+                )
                 s.add(row)
+                s.commit()
+                s.refresh(row)
+            else:
+                row.config_json = dict(self.settings.project_config or {})
                 s.commit()
                 s.refresh(row)
             return row
@@ -222,6 +235,51 @@ class TeamRuntime:
                 }
                 for r in rows
             ]
+
+    def list_approvals(self, status: str | None = None) -> list[dict[str, Any]]:
+        rows = self.gate.list_approvals(status=status)
+        return [
+            {
+                "id": r.id,
+                "action": r.action,
+                "risk_level": r.risk_level,
+                "status": r.status,
+                "requested_by": r.requested_by,
+                "decided_by": r.decided_by,
+                "reason": r.reason,
+                "tool_call_id": r.tool_call_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+
+    def resolve_approval(self, approval_id: int, approved: bool, reason: str = "") -> dict[str, Any]:
+        row = self.gate.resolve(approval_id, approved=approved, decided_by="api", reason=reason)
+        return {
+            "id": row.id,
+            "action": row.action,
+            "risk_level": row.risk_level,
+            "status": row.status,
+            "requested_by": row.requested_by,
+            "decided_by": row.decided_by,
+            "reason": row.reason,
+        }
+
+    def session_cost(self, session_id: int) -> dict[str, Any]:
+        from ai_team.memory.database import TraceEvent
+
+        with self.db.session() as s:
+            rows = s.query(TraceEvent).filter(TraceEvent.session_id == session_id).all()
+        tokens_in = sum(r.tokens_in or 0 for r in rows)
+        tokens_out = sum(r.tokens_out or 0 for r in rows)
+        cost_usd = sum(float(r.cost_usd or 0.0) for r in rows)
+        return {
+            "session_id": session_id,
+            "events": len(rows),
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost_usd": round(cost_usd, 8),
+        }
 
     async def ask(self, request: str) -> WorkflowResult:
         session = self.sessions.start(self.project_row.id, kind="ask")
@@ -388,7 +446,7 @@ class TeamRuntime:
         self.set_status(task, "implementing")
         context = self.context.build(f"{task.task_key} {task.title} {task.description}")
 
-        branch = _branch_name(task.task_key, task.title)
+        branch = _branch_name(task.task_key, task.title, self.settings.git_branch_prefix)
         if self.git.is_repo():
             self.git.ensure_identity()
             self.git.create_branch(branch)
@@ -400,101 +458,130 @@ class TeamRuntime:
         test_output = ""
         approved = False
         summary = ""
+        pending_approval: dict[str, Any] | None = None
 
-        for attempt in range(self.settings.max_review_loops):
-            coder_out = await self.coder.run(
-                f"Implement {task.task_key}: {task.title}\n{task.description}",
-                context,
-                tracer,
-            )
-            assert isinstance(coder_out, CoderOutput)
-            last_coder = coder_out
-            self._apply_coder_output(session.id, coder_out)
-
-            test_output = self._run_tests(session.id, coder_out)
-            tracer.emit("result", actor="test", payload={"output": test_output[:4000]})
-
-            context = self.context.build(f"{task.task_key} {task.title}")
-            last_review = await self.reviewer.run(
-                f"Review implementation of {task.task_key}",
-                context,
-                tracer,
-                extra={"coder": coder_out.model_dump(), "tests": test_output},
-            )
-            assert isinstance(last_review, ReviewerOutput)
-            self._store_review(task.id, "reviewer", last_review.verdict, last_review.model_dump())
-
-            last_red = await self.redteam.run(
-                f"Attack the implementation of {task.task_key}",
-                context,
-                tracer,
-                extra={"coder": coder_out.model_dump(), "review": last_review.model_dump()},
-            )
-            assert isinstance(last_red, RedTeamOutput)
-            self._store_review(task.id, "redteam", last_red.severity, last_red.model_dump())
-
-            decision = await self.manager.decide(
-                f"Approve commit for {task.task_key}?",
-                context,
-                tracer,
-                extra={
-                    "coder": coder_out.model_dump(),
-                    "tests": test_output,
-                    "review": last_review.model_dump(),
-                    "redteam": last_red.model_dump(),
-                },
-            )
-            tracer.emit("decision", actor="manager", payload=decision.model_dump())
-            summary = decision.decision
-            if (
-                decision.approved
-                and last_review.verdict == "approve"
-                and not last_red.should_block
-                and "FAIL" not in test_output
-            ):
-                approved = True
-                break
-            if last_review.verdict == "reject" or last_red.should_block:
-                break
-
-        if approved and last_coder is not None:
-            try:
-                self.gate.require(
-                    f"git commit for {task.task_key}",
-                    RiskLevel.MODERATE,
-                    requested_by="manager",
-                    reason=summary,
+        try:
+            for attempt in range(self.settings.max_review_loops):
+                coder_out = await self.coder.run(
+                    f"Implement {task.task_key}: {task.title}\n{task.description}",
+                    context,
+                    tracer,
                 )
-                commit_msg = f"{task.task_key}: {task.title}\n\n{summary}"
-                if self.git.is_repo():
-                    self.git.ensure_identity()
-                    commit_out = self.git.commit(commit_msg)
-                    tracer.emit("result", actor="git", payload={"commit": commit_out})
+                assert isinstance(coder_out, CoderOutput)
+                last_coder = coder_out
+                self._apply_coder_output(session.id, coder_out)
+
+                test_output = self._run_tests(session.id, coder_out)
+                tracer.emit("result", actor="test", payload={"output": test_output[:4000]})
+
+                context = self.context.build(f"{task.task_key} {task.title}")
+                last_review = await self.reviewer.run(
+                    f"Review implementation of {task.task_key}",
+                    context,
+                    tracer,
+                    extra={"coder": coder_out.model_dump(), "tests": test_output},
+                )
+                assert isinstance(last_review, ReviewerOutput)
+                self._store_review(task.id, "reviewer", last_review.verdict, last_review.model_dump())
+
+                last_red = await self.redteam.run(
+                    f"Attack the implementation of {task.task_key}",
+                    context,
+                    tracer,
+                    extra={"coder": coder_out.model_dump(), "review": last_review.model_dump()},
+                )
+                assert isinstance(last_red, RedTeamOutput)
+                self._store_review(task.id, "redteam", last_red.severity, last_red.model_dump())
+
+                decision = await self.manager.decide(
+                    f"Approve commit for {task.task_key}?",
+                    context,
+                    tracer,
+                    extra={
+                        "coder": coder_out.model_dump(),
+                        "tests": test_output,
+                        "review": last_review.model_dump(),
+                        "redteam": last_red.model_dump(),
+                    },
+                )
+                tracer.emit("decision", actor="manager", payload=decision.model_dump())
+                summary = decision.decision
+                if (
+                    decision.approved
+                    and last_review.verdict == "approve"
+                    and not last_red.should_block
+                    and "FAIL" not in test_output
+                ):
+                    approved = True
+                    break
+                if last_review.verdict == "reject" or last_red.should_block:
+                    break
+
+            if approved and last_coder is not None and self.settings.git_auto_commit:
+                try:
+                    self.gate.require(
+                        f"git commit for {task.task_key}",
+                        RiskLevel.MODERATE,
+                        requested_by="manager",
+                        reason=summary,
+                    )
+                    commit_msg = f"{task.task_key}: {task.title}\n\n{summary}"
+                    if self.git.is_repo():
+                        self.git.ensure_identity()
+                        commit_out = self.git.commit(commit_msg)
+                        tracer.emit("result", actor="git", payload={"commit": commit_out})
+                    self.set_status(task, "completed")
+                    ok = True
+                except ApprovalDenied as exc:
+                    self.set_status(task, "needs_approval")
+                    ok = False
+                    summary = str(exc)
+                except ApprovalPending as exc:
+                    self.set_status(task, "needs_approval")
+                    ok = False
+                    summary = str(exc)
+                    pending_approval = {
+                        "id": exc.approval.id,
+                        "action": exc.approval.action,
+                        "risk_level": exc.approval.risk_level,
+                        "status": exc.approval.status,
+                    }
+            elif approved and last_coder is not None:
                 self.set_status(task, "completed")
                 ok = True
-            except ApprovalDenied as exc:
-                self.set_status(task, "needs_approval")
+            else:
+                self.set_status(task, "changes_requested")
                 ok = False
-                summary = str(exc)
-        else:
-            self.set_status(task, "changes_requested")
+                summary = summary or "Implementation was not approved"
+        except ApprovalPending as exc:
+            self.set_status(task, "needs_approval")
             ok = False
-            summary = summary or "Implementation was not approved"
+            summary = str(exc)
+            pending_approval = {
+                "id": exc.approval.id,
+                "action": exc.approval.action,
+                "risk_level": exc.approval.risk_level,
+                "status": exc.approval.status,
+            }
 
         self.sessions.finish(session.id, "completed" if ok else "failed")
+        details: dict[str, Any] = {
+            "branch": branch,
+            "coder": last_coder.model_dump() if last_coder else None,
+            "tests": test_output,
+            "review": last_review.model_dump() if last_review else None,
+            "redteam": last_red.model_dump() if last_red else None,
+            "approved": approved,
+            "cost": self.session_cost(session.id),
+        }
+        if pending_approval:
+            details["pending_approval"] = pending_approval
         return WorkflowResult(
             ok=ok,
             task_key=task.task_key,
             session_id=session.id,
             summary=summary,
-            details={
-                "branch": branch,
-                "coder": last_coder.model_dump() if last_coder else None,
-                "tests": test_output,
-                "review": last_review.model_dump() if last_review else None,
-                "redteam": last_red.model_dump() if last_red else None,
-                "approved": approved,
-            },
+            details=details,
         )
 
     async def review_task(self, task_key: str) -> WorkflowResult:
@@ -581,9 +668,10 @@ def _normalize_shell_command(command: str) -> str:
     return command
 
 
-def _branch_name(task_key: str, title: str) -> str:
+def _branch_name(task_key: str, title: str, prefix: str = "ai/") -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
-    return f"ai/{task_key.lower()}-{slug or 'work'}"
+    prefix = prefix if prefix.endswith("/") else f"{prefix}/"
+    return f"{prefix}{task_key.lower()}-{slug or 'work'}"
 
 
 def _render_discussion(question: str, proposals, verdict) -> str:

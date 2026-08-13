@@ -92,6 +92,7 @@ AI_TEAM_PROVIDER=mock ai-team implement TASK-001 --yes
 | `ai-team implement TASK-001` | Coder → test → review → commit |
 | `ai-team review TASK-001` | Reviewer + Red Team |
 | `ai-team status` | Tasks, agents, sessions |
+| `ai-team replay SESSION_ID` | Xem lại timeline / cost của session |
 | `ai-team serve` | HTTP API (`:8080`) |
 | `ai-team mcp` | MCP stdio (filesystem, git, shell) |
 
@@ -127,6 +128,7 @@ ai-team serve
 | `GET` | `/sessions` |
 | `GET` | `/sessions/{id}/traces` |
 | `GET` | `/sessions/{id}/cost` |
+| `GET` | `/sessions/{id}/replay` |
 | `GET` | `/approvals` |
 | `GET` | `/approvals/{id}` |
 | `POST` | `/approvals/{id}` |

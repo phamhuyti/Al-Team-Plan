@@ -291,6 +291,64 @@ class TeamRuntime:
             "cost_usd": round(cost_usd, 8),
         }
 
+    def replay_session(self, session_id: int) -> dict[str, Any]:
+        """Rebuild a read-only timeline from SQLite traces (+ optional markdown log)."""
+        from ai_team.memory.database import Session, TraceEvent
+
+        with self.db.session() as s:
+            session = s.get(Session, session_id)
+            if session is None or session.project_id != self.project_row.id:
+                raise KeyError(f"Unknown session {session_id}")
+            traces = (
+                s.query(TraceEvent)
+                .filter(TraceEvent.session_id == session_id)
+                .order_by(TraceEvent.id.asc())
+                .all()
+            )
+            meta = {
+                "id": session.id,
+                "kind": session.kind,
+                "status": session.status,
+                "task_id": session.task_id,
+                "started_at": session.started_at.isoformat() if session.started_at else None,
+                "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+            }
+            events = [
+                {
+                    "id": row.id,
+                    "step": row.step,
+                    "actor": row.actor,
+                    "tokens_in": row.tokens_in,
+                    "tokens_out": row.tokens_out,
+                    "cost_usd": row.cost_usd,
+                    "payload": row.payload,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in traces
+            ]
+
+        markdown = self.memory.read(f"sessions/{session_id}.md")
+        cost = self.session_cost(session_id)
+        timeline = [
+            {
+                "t": ev["created_at"],
+                "step": ev["step"],
+                "actor": ev["actor"],
+                "tokens_in": ev["tokens_in"],
+                "tokens_out": ev["tokens_out"],
+                "cost_usd": ev["cost_usd"],
+                "summary": _trace_summary(ev),
+            }
+            for ev in events
+        ]
+        return {
+            "session": meta,
+            "timeline": timeline,
+            "events": events,
+            "cost": cost,
+            "markdown": markdown,
+        }
+
     async def ask(self, request: str) -> WorkflowResult:
         session = self.sessions.start(self.project_row.id, kind="ask")
         tracer = Tracer(self.db, session.id)
@@ -676,6 +734,22 @@ def _normalize_shell_command(command: str) -> str:
     if command.startswith("pytest"):
         return f"{sys.executable} -m {command}"
     return command
+
+
+def _trace_summary(event: dict[str, Any]) -> str:
+    payload = event.get("payload") or {}
+    step = event.get("step") or ""
+    if step == "task":
+        return str(payload.get("request") or payload.get("title") or payload.get("task_key") or "")[:200]
+    if step == "agent_prompt":
+        return str(payload.get("message") or "")[:200]
+    if step == "agent_response":
+        return str(payload.get("text") or "")[:200]
+    if step == "decision":
+        return str(payload.get("decision") or payload)[:200]
+    if step in {"tool_call", "result"}:
+        return str(payload)[:200]
+    return str(payload)[:200]
 
 
 def _branch_name(task_key: str, title: str, prefix: str = "ai/") -> str:

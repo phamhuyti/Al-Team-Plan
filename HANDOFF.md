@@ -38,7 +38,7 @@ V1 **đã implement và có test**. Hardening tiếp theo (config.yaml, provider
 | Provider + model per role | Xong |
 | `cost_usd` từ token + bảng giá | Xong |
 | API `GET/POST /approvals` + `/sessions/{id}/cost` | Xong |
-| Replay session | Chưa |
+| Replay session | Xong (`ai-team replay`, `GET /sessions/{id}/replay`) |
 | Researcher web search | Chưa |
 | Web UI, vector DB, MCP V2/V3, 8 role sau V1 | Chưa |
 | Routing đa model + cost optimization | Chưa |
@@ -139,7 +139,7 @@ Làm tiếp theo thứ tự plan: **không** nhảy UI nếu owner chưa yêu c�
 2. ~~Provider per role~~ — xong (`provider_for_role` + factory)
 3. ~~Tính `cost_usd` thật~~ — xong (`models/pricing.py` + trace)
 4. ~~API approval~~ — xong (`GET/POST /approvals/{id}`, defer mode)
-5. **Replay session** — đã ghi `.ai/sessions/` + SQLite, chưa lệnh replay.
+5. ~~Replay session~~ — xong (`ai-team replay`, `GET /sessions/{id}/replay`)
 6. **Researcher web search** — MCP V2 `web`; hiện chỉ local context.
 
 Sau V1 (plan):

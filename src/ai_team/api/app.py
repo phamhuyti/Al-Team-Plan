@@ -200,4 +200,11 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
     def session_cost(session_id: int) -> dict[str, Any]:
         return runtime().session_cost(session_id)
 
+    @app.get("/sessions/{session_id}/replay")
+    def replay_session(session_id: int) -> dict[str, Any]:
+        try:
+            return runtime().replay_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     return app

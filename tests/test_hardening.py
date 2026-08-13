@@ -199,6 +199,34 @@ def test_api_approvals_and_cost_endpoints(project_root: Path) -> None:
     assert any(row.get("cost_usd", 0) for row in traces if row["step"] == "agent_response")
 
 
+@pytest.mark.asyncio
+async def test_replay_session(runtime: TeamRuntime) -> None:
+    asked = await runtime.ask("Thiết kế authentication")
+    replay = runtime.replay_session(asked.session_id)
+    assert replay["session"]["id"] == asked.session_id
+    assert replay["timeline"]
+    assert replay["cost"]["tokens_in"] >= 0
+    steps = {row["step"] for row in replay["timeline"]}
+    assert "task" in steps
+    assert "agent_response" in steps
+
+
+def test_cli_replay(project_root: Path, settings: Settings) -> None:
+    from typer.testing import CliRunner
+
+    from ai_team.main import app
+
+    runner = CliRunner()
+    # Create a session via runtime first
+    import asyncio
+
+    rt = TeamRuntime(project_root, settings=settings, auto_approve=True)
+    result = asyncio.run(rt.ask("hello"))
+    out = runner.invoke(app, ["replay", str(result.session_id), "--project", str(project_root)])
+    assert out.exit_code == 0, out.output
+    assert f"Session {result.session_id}" in out.output
+
+
 def test_mock_provider_still_builds_without_keys() -> None:
     settings = Settings(provider="openai", model="gpt-4o", openai_api_key="")
     provider = build_provider(settings, "manager")

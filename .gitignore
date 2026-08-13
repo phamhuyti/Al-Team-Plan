@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Project runtime
+*.db
+*.sqlite
+*.sqlite3
+projects/*
+!projects/.gitkeep
+.ai/ai-team.db
+.ai/sessions/
+.ai/discussions/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Docker
+.docker/
+
+# Secrets
+.env.local
+secrets/

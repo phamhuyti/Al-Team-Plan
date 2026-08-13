@@ -78,10 +78,20 @@ class TeamRuntime:
         self.git = GitTools(self.root)
         self.shell = ShellTools(self.root)
         self.tools = ToolRegistry(self.fs, self.git, self.shell)
+        if auto_approve:
+            auto_moderate = True
+            auto_dangerous = True
+        elif defer_approvals:
+            # Explicit API path with yes=false — do not inherit env auto-approve.
+            auto_moderate = False
+            auto_dangerous = False
+        else:
+            auto_moderate = self.settings.auto_approve_moderate
+            auto_dangerous = self.settings.auto_approve_dangerous
         self.gate = ApprovalGate(
             self.db,
-            auto_moderate=auto_approve or self.settings.auto_approve_moderate,
-            auto_dangerous=auto_approve or self.settings.auto_approve_dangerous,
+            auto_moderate=auto_moderate,
+            auto_dangerous=auto_dangerous,
             defer=defer_approvals and not auto_approve,
         )
         extra = {

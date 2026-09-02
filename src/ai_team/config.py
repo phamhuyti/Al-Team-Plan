@@ -88,12 +88,34 @@ class Settings(BaseSettings):
     git_auto_commit: bool = True
     git_auto_push: bool = False
 
-    web_search_enabled: bool = True
-    web_search_backend: Literal["duckduckgo", "mock", "off"] = "duckduckgo"
-    web_search_max_results: int = 5
+    web_search_enabled: bool | None = None
+    web_search_backend: Literal["duckduckgo", "mock", "off"] | None = None
+    web_search_max_results: int | None = None
+
+    routing_enabled: bool | None = None
+    routing_strategy: Literal["balanced", "cost_optimized", "quality"] | None = None
+    routing_budget_usd: float | None = None
 
     # Raw project config snapshot (not from env).
     project_config: dict[str, Any] = Field(default_factory=dict)
+
+    def resolved_web_search_enabled(self) -> bool:
+        return True if self.web_search_enabled is None else self.web_search_enabled
+
+    def resolved_web_search_backend(self) -> Literal["duckduckgo", "mock", "off"]:
+        return "duckduckgo" if self.web_search_backend is None else self.web_search_backend
+
+    def resolved_web_search_max_results(self) -> int:
+        return 5 if self.web_search_max_results is None else self.web_search_max_results
+
+    def resolved_routing_enabled(self) -> bool:
+        return False if self.routing_enabled is None else self.routing_enabled
+
+    def resolved_routing_strategy(self) -> Literal["balanced", "cost_optimized", "quality"]:
+        return "balanced" if self.routing_strategy is None else self.routing_strategy
+
+    def resolved_routing_budget_usd(self) -> float | None:
+        return self.routing_budget_usd
 
     def model_for_role(self, role: str) -> str:
         override = getattr(self, f"{role}_model", None)
@@ -153,6 +175,7 @@ def apply_project_config(settings: Settings, root: Path) -> Settings:
     if not raw:
         return settings.model_copy(update={"project_config": {}})
 
+    explicit = settings.model_dump(exclude_unset=True)
     updates: dict[str, Any] = {"project_config": raw}
     agents = raw.get("agents") or {}
     if isinstance(agents, dict):
@@ -188,15 +211,34 @@ def apply_project_config(settings: Settings, root: Path) -> Settings:
 
     web = raw.get("web") or raw.get("web_search") or {}
     if isinstance(web, dict):
-        if "enabled" in web and not _env_set("AI_TEAM_WEB_SEARCH_ENABLED"):
+        if "enabled" in web and "web_search_enabled" not in explicit and not _env_set("AI_TEAM_WEB_SEARCH_ENABLED"):
             updates["web_search_enabled"] = bool(web["enabled"])
-        if web.get("backend") and not _env_set("AI_TEAM_WEB_SEARCH_BACKEND"):
+        if web.get("backend") and "web_search_backend" not in explicit and not _env_set("AI_TEAM_WEB_SEARCH_BACKEND"):
             backend = str(web["backend"]).lower()
             if backend in {"duckduckgo", "mock", "off"}:
                 updates["web_search_backend"] = backend
-        if web.get("max_results") is not None and not _env_set("AI_TEAM_WEB_SEARCH_MAX_RESULTS"):
+        if (
+            web.get("max_results") is not None
+            and "web_search_max_results" not in explicit
+            and not _env_set("AI_TEAM_WEB_SEARCH_MAX_RESULTS")
+        ):
             try:
                 updates["web_search_max_results"] = int(web["max_results"])
+            except (TypeError, ValueError):
+                pass
+
+    routing = raw.get("routing") or {}
+    if isinstance(routing, dict):
+        if "enabled" in routing and "routing_enabled" not in explicit and not _env_set("AI_TEAM_ROUTING_ENABLED"):
+            updates["routing_enabled"] = bool(routing["enabled"])
+        if routing.get("strategy") and "routing_strategy" not in explicit and not _env_set("AI_TEAM_ROUTING_STRATEGY"):
+            strategy = str(routing["strategy"]).lower()
+            if strategy in {"balanced", "cost_optimized", "quality"}:
+                updates["routing_strategy"] = strategy
+        budget = routing.get("budget_usd_per_session") or routing.get("budget_usd")
+        if budget is not None and "routing_budget_usd" not in explicit and not _env_set("AI_TEAM_ROUTING_BUDGET_USD"):
+            try:
+                updates["routing_budget_usd"] = float(budget)
             except (TypeError, ValueError):
                 pass
 

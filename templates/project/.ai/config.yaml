@@ -31,3 +31,30 @@ web:
   enabled: true
   backend: duckduckgo
   max_results: 5
+
+routing:
+  enabled: false
+  strategy: balanced
+  budget_usd_per_session: 2.0
+  tiers:
+    simple:
+      manager: {provider: openai, model: gpt-4o-mini}
+      architect: {provider: openai, model: gpt-4o-mini}
+      researcher: {provider: openai, model: gpt-4o-mini}
+      coder: {provider: openai, model: gpt-4o-mini}
+      reviewer: {provider: openai, model: gpt-4o-mini}
+      redteam: {provider: openai, model: gpt-4o-mini}
+    standard:
+      manager: {provider: openai, model: gpt-4o}
+      architect: {provider: openai, model: gpt-4o}
+      researcher: {provider: openai, model: gpt-4o}
+      coder: {provider: openai, model: gpt-4o}
+      reviewer: {provider: openai, model: gpt-4o}
+      redteam: {provider: openai, model: gpt-4o}
+    complex:
+      manager: {provider: openai, model: gpt-4o}
+      architect: {provider: openai, model: gpt-4o}
+      researcher: {provider: openai, model: gpt-4o}
+      coder: {provider: anthropic, model: claude-sonnet-4-5}
+      reviewer: {provider: openai, model: gpt-4o}
+      redteam: {provider: openai, model: gpt-4o}

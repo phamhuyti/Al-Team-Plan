@@ -11,10 +11,18 @@ from ai_team.models.openai import OpenAIProvider
 from ai_team.models.openrouter import OpenRouterProvider
 
 
-def build_provider(settings: Settings, role: str | None = None) -> ModelProvider:
+def build_provider(
+    settings: Settings,
+    role: str | None = None,
+    *,
+    provider_override: str | None = None,
+    model_override: str | None = None,
+) -> ModelProvider:
     role_name = role or "manager"
-    model = settings.model_for_role(role_name)
-    provider: ProviderName = settings.provider_for_role(role_name)
+    model = model_override or settings.model_for_role(role_name)
+    provider: ProviderName = provider_override or settings.provider_for_role(role_name)  # type: ignore[assignment]
+    if provider_override:
+        provider = settings.effective_provider_name(provider)  # type: ignore[arg-type]
     return _build(provider, model, settings)
 
 

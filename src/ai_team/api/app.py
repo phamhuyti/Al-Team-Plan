@@ -1,16 +1,21 @@
-"""HTTP API for later UI/Cursor/automation integration."""
+"""HTTP API for UI/Cursor/automation integration."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ai_team.config import Settings, load_settings
 from ai_team.orchestration.workflow import TeamRuntime, init_project
 from ai_team.security.approvals import ApprovalPending
+from ai_team.web import static_dir
 
 
 class ProjectCreate(BaseModel):
@@ -30,6 +35,12 @@ class RunBody(BaseModel):
     yes: bool = True
 
 
+class ChatBody(BaseModel):
+    mode: str = Field(default="ask", description="ask | research | debate | plan")
+    message: str
+    yes: bool = True
+
+
 class ApprovalDecision(BaseModel):
     approved: bool = True
     reason: str = ""
@@ -38,7 +49,7 @@ class ApprovalDecision(BaseModel):
 def create_app(root: Path | None = None, settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     default_root = (root or Path.cwd()).resolve()
-    app = FastAPI(title="AI-Team", version="0.1.0")
+    app = FastAPI(title="AI-Team", version="0.2.0")
 
     def runtime(path: Path | None = None, yes: bool = True) -> TeamRuntime:
         return TeamRuntime(
@@ -51,6 +62,22 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/dashboard")
+    def dashboard() -> dict[str, Any]:
+        rt = runtime()
+        summary = rt.project_cost_summary()
+        return {
+            **summary,
+            "project": str(rt.root),
+            "routing_enabled": rt.settings.resolved_routing_enabled(),
+            "routing_strategy": rt.settings.resolved_routing_strategy(),
+        }
+
+    @app.get("/routing/preview")
+    def routing_preview(prompt: str = Query(default="Add authentication")) -> dict[str, Any]:
+        rt = runtime()
+        return rt.router.routing_snapshot(prompt)
 
     @app.post("/projects")
     def create_project(body: ProjectCreate) -> dict[str, Any]:
@@ -66,6 +93,10 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
             "id": rt.project_row.id,
             "config": rt.settings.project_config,
         }
+
+    @app.get("/tasks")
+    def list_tasks() -> list[dict[str, Any]]:
+        return runtime().list_tasks()
 
     @app.post("/tasks")
     def create_task(body: TaskCreate) -> dict[str, Any]:
@@ -119,6 +150,28 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
             payload["needs_approval"] = True
             payload["approval_id"] = result.details["pending_approval"]["id"]
         return payload
+
+    @app.post("/chat")
+    async def chat(body: ChatBody) -> dict[str, Any]:
+        rt = runtime(yes=body.yes)
+        mode = body.mode.lower().strip()
+        if mode == "ask":
+            result = await rt.ask(body.message)
+        elif mode == "research":
+            result = await rt.research(body.message)
+        elif mode == "debate":
+            result = await rt.debate(body.message, force=True)
+        elif mode == "plan":
+            result = await rt.plan(body.message)
+        else:
+            raise HTTPException(400, f"Unsupported chat mode {body.mode}")
+        return {
+            "ok": result.ok,
+            "session_id": result.session_id,
+            "task_key": result.task_key,
+            "summary": result.summary,
+            "details": result.details,
+        }
 
     @app.post("/tasks/{task_key}/debate")
     async def debate_task(task_key: str, body: RunBody) -> dict[str, Any]:
@@ -206,5 +259,43 @@ def create_app(root: Path | None = None, settings: Settings | None = None) -> Fa
             return runtime().replay_session(session_id)
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/sessions/{session_id}/events")
+    async def session_events(session_id: int) -> StreamingResponse:
+        """SSE stream of trace events for live chat UI."""
+
+        async def event_generator():
+            rt = runtime()
+            seen = 0
+            for _ in range(120):
+                rows = traces(session_id)
+                for row in rows[seen:]:
+                    summary = row.get("step") or ""
+                    if row.get("actor"):
+                        summary = f"{row['actor']}: {summary}"
+                    yield f"data: {json.dumps({'type': 'trace', 'summary': summary, 'payload': row})}\n\n"
+                seen = len(rows)
+                replay = rt.replay_session(session_id)
+                if replay["session"].get("ended_at"):
+                    result = {
+                        "type": "result",
+                        "summary": replay["timeline"][-1]["summary"] if replay["timeline"] else "done",
+                        "payload": replay,
+                    }
+                    yield f"data: {json.dumps(result)}\n\n"
+                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                    return
+                await asyncio.sleep(0.5)
+            yield f"data: {json.dumps({'type': 'done', 'summary': 'timeout'})}\n\n"
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    ui_dir = static_dir()
+    if ui_dir.exists():
+        app.mount("/ui", StaticFiles(directory=str(ui_dir)), name="ui")
+
+        @app.get("/", include_in_schema=False)
+        def ui_index() -> FileResponse:
+            return FileResponse(ui_dir / "index.html")
 
     return app

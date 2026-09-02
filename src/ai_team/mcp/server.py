@@ -84,8 +84,8 @@ def serve_stdio(root: Path | None = None) -> None:
     settings = load_settings()
     registry = build_registry(
         Path(root or ".").resolve(),
-        web_enabled=settings.web_search_enabled,
-        web_backend=settings.web_search_backend,
+        web_enabled=settings.resolved_web_search_enabled(),
+        web_backend=settings.resolved_web_search_backend(),
     )
     for line in sys.stdin:
         line = line.strip()

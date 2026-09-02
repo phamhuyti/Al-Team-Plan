@@ -26,3 +26,8 @@ git:
   branch_prefix: ai/
   auto_commit: true
   auto_push: false
+
+web:
+  enabled: true
+  backend: duckduckgo
+  max_results: 5

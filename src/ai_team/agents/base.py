@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ai_team.context.engine import ContextBundle
 from ai_team.models.base import ChatMessage, ModelProvider
+from ai_team.models.pricing import estimate_cost_usd
 from ai_team.paths import load_prompt
 from ai_team.tracing.audit import Tracer
 
@@ -51,12 +52,18 @@ class BaseAgent:
             tracer.emit("agent_prompt", actor=self.role, payload={"message": user_message[:2000]})
         result = await self.model.generate(messages, response_schema=self.output_schema)
         if tracer:
+            cost = estimate_cost_usd(self.model.model, result.tokens_in, result.tokens_out)
             tracer.emit(
                 "agent_response",
                 actor=self.role,
-                payload={"text": result.text[:4000]},
+                payload={
+                    "text": result.text[:4000],
+                    "provider": getattr(self.model, "name", ""),
+                    "model": self.model.model,
+                },
                 tokens_in=result.tokens_in,
                 tokens_out=result.tokens_out,
+                cost_usd=cost,
             )
         if result.parsed is None:
             raise RuntimeError(f"{self.role} returned unparseable output")

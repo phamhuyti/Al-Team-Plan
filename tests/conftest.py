@@ -19,7 +19,14 @@ def _mock_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(provider="mock", model="mock", auto_approve_moderate=True, auto_approve_dangerous=True)
+    return Settings(
+        provider="mock",
+        model="mock",
+        auto_approve_moderate=True,
+        auto_approve_dangerous=True,
+        web_search_enabled=True,
+        web_search_backend="mock",
+    )
 
 
 @pytest.fixture

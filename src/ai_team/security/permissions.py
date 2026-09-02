@@ -81,7 +81,7 @@ def classify_filesystem(action: str) -> RiskLevel:
 
 
 def classify_tool(name: str, arguments: dict[str, Any]) -> RiskLevel:
-    if name in {"fs_read", "fs_list", "fs_search", "code_search"}:
+    if name in {"fs_read", "fs_list", "fs_search", "code_search", "web_search"}:
         return RiskLevel.SAFE
     if name in {"fs_write", "fs_mkdir"}:
         return RiskLevel.MODERATE

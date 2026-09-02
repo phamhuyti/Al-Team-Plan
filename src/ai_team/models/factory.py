@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ai_team.config import Settings
+from ai_team.config import ProviderName, Settings
 from ai_team.models.anthropic import AnthropicProvider
 from ai_team.models.base import ModelProvider
 from ai_team.models.google import GoogleProvider
@@ -12,8 +12,13 @@ from ai_team.models.openrouter import OpenRouterProvider
 
 
 def build_provider(settings: Settings, role: str | None = None) -> ModelProvider:
-    model = settings.model_for_role(role or "manager")
-    provider = settings.effective_provider()
+    role_name = role or "manager"
+    model = settings.model_for_role(role_name)
+    provider: ProviderName = settings.provider_for_role(role_name)
+    return _build(provider, model, settings)
+
+
+def _build(provider: ProviderName, model: str, settings: Settings) -> ModelProvider:
     if provider == "mock":
         return MockProvider(model=model)
     if provider == "openai":

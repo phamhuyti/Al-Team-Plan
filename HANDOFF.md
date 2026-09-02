@@ -25,7 +25,7 @@ OpenAI là model lõi V1. Không làm UI, vector DB, hay MCP V2/V3 trong V1.
 
 ## Hiện trạng
 
-V1 **đã implement và có test**. `pytest -q` = **15 passed** (mock, không cần API key).
+V1 **đã implement và có test**. Hardening tiếp theo (config.yaml, provider/role, cost, approval API) nằm trên nhánh / PR hiện tại.
 
 | Phần | Trạng thái |
 |---|---|
@@ -34,7 +34,13 @@ V1 **đã implement và có test**. `pytest -q` = **15 passed** (mock, không c�
 | MCP V1: filesystem, git, shell | Xong |
 | OpenAI + abstraction Anthropic/Gemini/OpenRouter/Mock | Adapter xong |
 | README GitHub | Xong |
-| Web UI, vector DB, MCP V2/V3, 8 role sau V1 | Chưa |
+| Đọc `.ai/config.yaml` lúc runtime | Xong |
+| Provider + model per role | Xong |
+| `cost_usd` từ token + bảng giá | Xong |
+| API `GET/POST /approvals` + `/sessions/{id}/cost` | Xong |
+| Replay session | Xong (`ai-team replay`, `GET /sessions/{id}/replay`) |
+| Researcher web search | Xong (`web_search` tool + DuckDuckGo/mock) |
+| Web UI, vector DB, MCP V2 GitHub/Postgres, 8 role sau V1 | Chưa |
 | Routing đa model + cost optimization | Chưa |
 
 ---
@@ -86,7 +92,7 @@ src/ai_team/
   models/{openai,anthropic,google,openrouter,mock}.py
   memory/                      SQLite + .ai markdown
   context/engine.py            retrieval keyword, không vector
-  tools/                       fs, git, shell, docker
+  tools/                       fs, git, shell, docker, web
   mcp/server.py                MCP JSON-RPC stdio
   security/permissions.py      SAFE / MODERATE / DANGEROUS
   security/approvals.py        gate + CLI [y/N]
@@ -121,20 +127,20 @@ Judge (`JudgeAgent`) chỉ chạy khi debate, không tính là member team V1.
 
 Output bắt buộc là JSON contract trong `agents/contracts.py`.
 
-Provider hiện tại: **một** `AI_TEAM_PROVIDER` cho cả team. Có thể override **model** theo role (`AI_TEAM_CODER_MODEL`), chưa override **hãng** theo role.
+Provider hiện tại: có thể set **provider + model theo role** qua `.ai/config.yaml` hoặc env `AI_TEAM_{ROLE}_PROVIDER` / `AI_TEAM_{ROLE}_MODEL`. Global vẫn là `AI_TEAM_PROVIDER` / `AI_TEAM_MODEL`.
 
 ---
 
 ## Việc còn đọng (ưu tiên gợi ý)
 
-Làm tiếp theo thứ tự plan: **không** nhảy UI nếu owner chưa yêu cầu. Việc hữu ích ngay trên V1:
+Làm tiếp theo thứ tự plan: **không** nhảy UI nếu owner chưa yêu cầu.
 
-1. **Đọc `templates/project/.ai/config.yaml` lúc runtime** — file có provider/model per agent nhưng `TeamRuntime` bỏ qua, chỉ dùng env.
-2. **Provider per role** — factory đã nhận `role` cho model; chưa nhận provider khác nhau (Manager=OpenAI, Coder=Claude).
-3. **Tính `cost_usd` thật** — `TraceEvent.cost_usd` luôn 0; token đã lưu.
-4. **API approval** — CLI có `[y/N]` / `--yes`; chưa `POST /approvals/{id}`.
-5. **Replay session** — đã ghi `.ai/sessions/` + SQLite, chưa lệnh replay.
-6. **Researcher web search** — MCP V2 `web`; hiện chỉ local context.
+1. ~~Đọc `.ai/config.yaml` lúc runtime~~ — xong (`apply_project_config`)
+2. ~~Provider per role~~ — xong (`provider_for_role` + factory)
+3. ~~Tính `cost_usd` thật~~ — xong (`models/pricing.py` + trace)
+4. ~~API approval~~ — xong (`GET/POST /approvals/{id}`, defer mode)
+5. ~~Replay session~~ — xong (`ai-team replay`, `GET /sessions/{id}/replay`)
+6. ~~Researcher web search~~ — xong (`tools/web.py`, MCP `web_search`, backend duckduckgo/mock/off)
 
 Sau V1 (plan):
 
@@ -163,12 +169,11 @@ Sau V1 (plan):
 
 ## Rủi ro / nợ kỹ thuật
 
-- `templates/project/.ai/config.yaml` chưa được load.
 - Anthropic/Google/OpenRouter mới test qua adapter HTTP, **chưa có integration test live**.
 - Mock Coder luôn tạo `src/{auth|queue|feature}.py` + test `ping()` — đủ cho CI, không phản ánh coder LLM thật.
-- `Researcher` không search web.
-- Approval interactive cần TTY; CI phải `--yes` hoặc `AI_TEAM_AUTO_APPROVE_*`.
-- Cost/token chưa có báo cáo.
+- `Researcher` có `web_search` (DuckDuckGo HTML, không cần key); offline thì degrade về `[]` / backend `mock|off`.
+- Approval interactive cần TTY; CI phải `--yes` hoặc `AI_TEAM_AUTO_APPROVE_*`. API dùng `defer` + `POST /approvals/{id}`.
+- Bảng giá `cost_usd` là ước lượng (per 1M tokens), không phải invoice provider.
 - Docker tool = `docker …` qua shell, profile `mcp` tách container stdio.
 
 ---
@@ -192,14 +197,14 @@ Bắt buộc: `tests/test_workflow.py` (plan + implement + audit + debate). Đ�
 ## Lệnh git hiện tại
 
 ```bash
-# nhánh làm việc
-git checkout cursor/ai-team-v1-implementation-0e40
-git pull origin cursor/ai-team-v1-implementation-0e40
+# nhánh hardening V1
+git checkout cursor/v1-hardening-config-cost-approvals-85d2
+git pull origin cursor/v1-hardening-config-cost-approvals-85d2
 
 # sau khi sửa
 git add -A
 git commit -m "..."
-git push -u origin cursor/ai-team-v1-implementation-0e40
+git push -u origin cursor/v1-hardening-config-cost-approvals-85d2
 ```
 
-PR #1 đang draft. Merge vào `main` khi owner review.
+PR hardening đang draft. Merge vào `main` khi owner review.

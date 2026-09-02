@@ -1,4 +1,4 @@
-"""CLI: init, ask, research, debate, plan, implement, review, status, serve, mcp."""
+"""CLI: init, ask, research, debate, plan, implement, review, status, replay, serve, mcp."""
 
 from __future__ import annotations
 
@@ -145,6 +145,47 @@ def status_cmd(project: Optional[Path] = typer.Option(None, "--project", "-p")) 
     for session in runtime.list_sessions()[:10]:
         sessions.add_row(str(session["id"]), session["kind"], session["status"])
     console.print(sessions)
+
+
+@app.command("replay")
+def replay_cmd(
+    session_id: int = typer.Argument(..., help="Session id from status / plan / implement"),
+    project: Optional[Path] = typer.Option(None, "--project", "-p"),
+    json_out: bool = typer.Option(False, "--json", help="Print full JSON replay"),
+) -> None:
+    """Replay a recorded session timeline from SQLite traces."""
+    runtime = _runtime(project)
+    try:
+        replay = runtime.replay_session(session_id)
+    except KeyError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if json_out:
+        console.print_json(data=replay)
+        return
+
+    meta = replay["session"]
+    cost = replay["cost"]
+    console.print(
+        f"[bold]Session {meta['id']}[/bold] kind={meta['kind']} status={meta['status']} "
+        f"tokens={cost['tokens_in']}+{cost['tokens_out']} cost_usd={cost['cost_usd']}"
+    )
+    table = Table(title="Timeline")
+    table.add_column("ID")
+    table.add_column("Step")
+    table.add_column("Actor")
+    table.add_column("Cost")
+    table.add_column("Summary")
+    for row in replay["timeline"]:
+        table.add_row(
+            str(row.get("t") or ""),
+            str(row.get("step") or ""),
+            str(row.get("actor") or ""),
+            f"{row.get('cost_usd') or 0:.6f}",
+            str(row.get("summary") or "")[:80],
+        )
+    console.print(table)
 
 
 @app.command("serve")

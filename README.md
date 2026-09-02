@@ -119,6 +119,10 @@ ai-team serve
 | Method | Path |
 |---|---|
 | `GET` | `/health` |
+| `GET` | `/dashboard` |
+| `GET` | `/routing/preview` |
+| `POST` | `/chat` |
+| `GET` | `/tasks` |
 | `POST` | `/projects` |
 | `POST` | `/tasks` |
 | `POST` | `/tasks/{id}/run` |
@@ -140,7 +144,33 @@ Mỗi project có thể ghi đè provider/model theo role trong `.ai/config.yaml
 
 Researcher có thể gọi `web_search` (DuckDuckGo, không cần API key). Tắt bằng `AI_TEAM_WEB_SEARCH_ENABLED=false` hoặc `backend: off` trong `.ai/config.yaml`. CI/demo dùng `AI_TEAM_WEB_SEARCH_BACKEND=mock`.
 
-Web UI **không** nằm trong V1.
+### Web UI (Phase 7)
+
+Chạy `ai-team serve` rồi mở `http://localhost:8080/`:
+
+- **Dashboard** — agents, sessions, decisions, routing preview
+- **Tasks** — tạo task, chạy plan/implement
+- **Live Chat** — ask / research / debate / plan qua API + SSE traces
+- **Approvals** — duyệt/từ chối pending approvals
+- **Cost Monitor** — tổng cost project và theo session
+
+### Routing (Phase 8)
+
+Bật trong `.ai/config.yaml`:
+
+```yaml
+routing:
+  enabled: true
+  strategy: cost_optimized   # balanced | quality
+  budget_usd_per_session: 2.0
+  tiers:
+    simple:
+      coder: {provider: openai, model: gpt-4o-mini}
+    complex:
+      coder: {provider: anthropic, model: claude-sonnet-4-5}
+```
+
+Mỗi workflow ghi trace `routing` và chọn model theo độ phức tạp task + budget session.
 
 ---
 
@@ -331,8 +361,8 @@ pytest -q
 | 4 | Filesystem, Git, Shell, MCP | Có |
 | 5 | Debate, Judge, decision records | Có |
 | 6 | Branch, code, tests, review, approval, commit | Có |
-| 7 | Web UI | Chưa |
-| 8 | Claude / Gemini / OpenRouter routing | Abstraction có, routing production chưa |
+| 7 | Web UI dashboard, chat, tasks, approvals, cost | Có |
+| 8 | Claude / Gemini / OpenRouter routing + cost optimization | Có |
 
 ---
 

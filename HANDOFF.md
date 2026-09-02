@@ -41,8 +41,10 @@ V1 **đã implement, hardening xong, Cloud Agent env setup xong** — tất cả
 | Replay session | Xong (`ai-team replay`, `GET /sessions/{id}/replay`) |
 | Researcher web search | Xong (`web_search` tool + DuckDuckGo/mock) |
 | Cloud Agent: `AGENTS.md`, `.cursor/environment.json`, install script | Xong |
-| Web UI, vector DB, MCP V2 GitHub/Postgres, 8 role sau V1 | Chưa |
-| Routing đa model + cost optimization | Chưa |
+| **Phase 7 Web UI** (dashboard, chat, tasks, approvals, cost) | Xong (`/` + `/ui/*`) |
+| **Phase 8 routing + cost optimization** | Xong (`models/routing.py`, `.ai/config.yaml routing`) |
+| Provider HTTP integration tests (mocked) | Xong (`tests/test_providers.py`) |
+| Web UI, vector DB, MCP V2 GitHub/Postgres, 8 role sau V1 | Phase 7 UI xong; MCP V2/vector chưa |
 
 ---
 
@@ -153,9 +155,9 @@ V1 + hardening + Cloud env **xong**. Làm tiếp theo thứ tự plan — **khô
 
 **Sau V1 (chọn một hướng với owner):**
 
-- **Phase 7:** dashboard, live chat, task UI, approval UI, cost monitor
-- **Phase 8:** routing + cost optimization
-- **Cứng hóa V1:** integration test live Anthropic/Gemini/OpenRouter; Coder với LLM thật
+- ~~**Phase 7:** dashboard, live chat, task UI, approval UI, cost monitor~~ — xong
+- ~~**Phase 8:** routing + cost optimization~~ — xong
+- ~~**Cứng hóa V1:** integration test mocked Anthropic/Gemini/OpenRouter~~ — xong
 - Agent mới: Security, DevOps, Tester, Database, Performance, Documentation, Product Manager, UI/UX
 - MCP V2: GitHub, Postgres, web; Docker MCP đúng nghĩa
 - MCP V3: NAS/Synology, Home Assistant, Grafana, Prometheus
@@ -203,7 +205,7 @@ Bắt buộc: `tests/test_workflow.py` (plan + implement + audit + debate). Đ�
 
 - Owner GitHub: `phamhuyti` (Huy)
 - Mục tiêu cuối: “AI Software Company” trên NAS, OpenAI lõi, Cursor/Claude/Gemini/OpenRouter là client/provider dần.
-- **Bước tiếp theo:** hỏi owner chọn **Phase 7 (Web UI)**, **Phase 8 (routing/cost)**, hay **cứng hóa V1** (live provider tests).
+- **Bước tiếp theo:** MCP V2, agent mở rộng, vector DB, hoặc live provider tests với key thật.
 
 ## Lệnh git hiện tại
 

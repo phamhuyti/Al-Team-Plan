@@ -3,9 +3,10 @@
 ## Cursor Cloud specific instructions
 
 AI-Team is a Python 3.11+ project: a multi-agent orchestrator exposed as a Typer
-CLI (`ai-team`) and a FastAPI HTTP API. There is no web UI. Standard usage is
-documented in `README.md` and `HANDOFF.md`; the notes below only cover
-non-obvious, durable gotchas for working in the cloud environment.
+CLI (`ai-team`), a FastAPI HTTP API, and a Web UI at `/` when running `ai-team serve`.
+Standard usage is documented in `README.md`, full docs in `docs/README.md`, and
+development guidelines in `docs/guidelines.md`. `HANDOFF.md` is for agent handoff;
+the notes below only cover non-obvious, durable gotchas for the cloud environment.
 
 ### Environment / how to run
 

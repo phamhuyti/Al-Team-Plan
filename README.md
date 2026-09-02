@@ -6,7 +6,7 @@ Một Manager điều phối toàn bộ dự án. Architect, Researcher, Coder, 
 
 > V1 dùng **OpenAI** làm model lõi. Claude, Gemini và OpenRouter đã có abstraction — chưa phải dependency cứng.
 
-[Yêu cầu](#yêu-cầu) · [Cài đặt](#cài-đặt) · [Quick start](#quick-start) · [CLI](#cli) · [Docker](#docker--nas) · [Kiến trúc](#kiến-trúc)
+[Yêu cầu](#yêu-cầu) · [Cài đặt](#cài-đặt) · [Quick start](#quick-start) · [CLI](#cli) · [Docker](#docker--nas) · [Kiến trúc](#kiến-trúc) · **[Tài liệu đầy đủ](docs/README.md)**
 
 ---
 
@@ -372,4 +372,6 @@ MIT
 
 ## Handoff cho agent/dev tiếp theo
 
-Xem [HANDOFF.md](HANDOFF.md): trạng thái V1, bản đồ code, việc còn đọng, cách chạy và quyết định kỹ thuật đã chốt.
+- **[docs/README.md](docs/README.md)** — tài liệu đầy đủ + guidelines
+- **[docs/guidelines.md](docs/guidelines.md)** — quy tắc sử dụng & phát triển
+- [HANDOFF.md](HANDOFF.md) — trạng thái repo, bản đồ code, việc còn đọng

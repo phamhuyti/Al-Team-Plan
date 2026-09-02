@@ -9,7 +9,9 @@ Tài liệu này để người hoặc agent tiếp theo nhận việc, không p
 - **Plan gốc:** AI-Team Multi-Agent Development Team (NAS/Docker), V1 = 6 agent + workflow có audit
 - **Ngôn ngữ làm việc với owner:** tiếng Việt (Huy)
 
-Toàn bộ code V1 và hardening nằm trên `main`. Cloud Agent dùng `.cursor/environment.json` + `scripts/cloud-agent-install.sh`.
+Toàn bộ code V1, Phase 7/8 và hardening nằm trên `main`. Cloud Agent dùng `.cursor/environment.json` + `scripts/cloud-agent-install.sh`.
+
+**Tài liệu đầy đủ:** [docs/README.md](docs/README.md) · **Guidelines:** [docs/guidelines.md](docs/guidelines.md)
 
 ---
 
@@ -85,6 +87,8 @@ PROJECT_WORKSPACE=/volume1/projects/my-app docker compose up --build
 ---
 
 ## Bản đồ code (nơi sửa việc tiếp theo)
+
+Tài liệu chi tiết: [docs/architecture.md](docs/architecture.md)
 
 ```text
 src/ai_team/

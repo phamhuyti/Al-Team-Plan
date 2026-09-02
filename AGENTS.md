@@ -22,10 +22,8 @@ non-obvious, durable gotchas for working in the cloud environment.
 
 ### Non-obvious gotchas
 
-- `ai-team serve` uses the process's **current working directory** as the project
-  root for all `/tasks` operations (not the `--project` flag for those routes).
-  Start the server from the target project directory, and run `ai-team init`
-  there first so `.ai/` and the SQLite DB exist.
+- `ai-team serve` fixes the API project root at **startup** (`cwd` or `ai-team serve --project PATH`). HTTP `/tasks` routes do not accept a per-request project path — start the server from the target project directory (after `ai-team init`) or pass `--project` when launching `serve`.
+- When working on a demo project outside the repo (e.g. `/tmp/demo`), invoke the CLI via the **workspace** venv (`.venv/bin/ai-team` from the repo root, or activate that venv). Demo directories do not get their own `.venv`.
 - The `implement`/`plan`/`run` workflows perform a real `git commit` inside the
   target project, so the working directory must be a git repo with a usable git
   identity. Interactive approval prompts are skipped only with `--yes` (CLI) or

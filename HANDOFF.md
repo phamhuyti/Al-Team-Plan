@@ -3,13 +3,13 @@
 Tài liệu này để người hoặc agent tiếp theo nhận việc, không phải README người dùng.
 
 - **Repo:** https://github.com/phamhuyti/Al-Team-Plan
-- **PR:** https://github.com/phamhuyti/Al-Team-Plan/pull/1
-- **Branch:** `cursor/ai-team-v1-implementation-0e40` (base: `main`)
-- **HEAD:** `ea85ff4` — README GitHub; implement chính ở `c555d54`
+- **Branch làm việc:** `main`
+- **HEAD:** `75b252f` — Cloud Agent env setup (merge PR #4); V1 + hardening đã trên `main`
+- **PR đã merge gần đây:** [#2 hardening](https://github.com/phamhuyti/Al-Team-Plan/pull/2), [#3/#4 AGENTS + env](https://github.com/phamhuyti/Al-Team-Plan/pull/4)
 - **Plan gốc:** AI-Team Multi-Agent Development Team (NAS/Docker), V1 = 6 agent + workflow có audit
 - **Ngôn ngữ làm việc với owner:** tiếng Việt (Huy)
 
-`main` hiện chỉ có commit khởi tạo (`# Al-Team-Plan`). Toàn bộ code nằm trên PR.
+Toàn bộ code V1 và hardening nằm trên `main`. Cloud Agent dùng `.cursor/environment.json` + `scripts/cloud-agent-install.sh`.
 
 ---
 
@@ -25,13 +25,13 @@ OpenAI là model lõi V1. Không làm UI, vector DB, hay MCP V2/V3 trong V1.
 
 ## Hiện trạng
 
-V1 **đã implement và có test**. Hardening tiếp theo (config.yaml, provider/role, cost, approval API) nằm trên nhánh / PR hiện tại.
+V1 **đã implement, hardening xong, Cloud Agent env setup xong** — tất cả trên `main`.
 
 | Phần | Trạng thái |
 |---|---|
 | Phase 0–6 (arch, agents, memory, tools, debate, autonomous coding) | Xong |
 | CLI + HTTP API + Docker Compose | Xong |
-| MCP V1: filesystem, git, shell | Xong |
+| MCP V1: filesystem, git, shell, web_search | Xong |
 | OpenAI + abstraction Anthropic/Gemini/OpenRouter/Mock | Adapter xong |
 | README GitHub | Xong |
 | Đọc `.ai/config.yaml` lúc runtime | Xong |
@@ -40,6 +40,7 @@ V1 **đã implement và có test**. Hardening tiếp theo (config.yaml, provider
 | API `GET/POST /approvals` + `/sessions/{id}/cost` | Xong |
 | Replay session | Xong (`ai-team replay`, `GET /sessions/{id}/replay`) |
 | Researcher web search | Xong (`web_search` tool + DuckDuckGo/mock) |
+| Cloud Agent: `AGENTS.md`, `.cursor/environment.json`, install script | Xong |
 | Web UI, vector DB, MCP V2 GitHub/Postgres, 8 role sau V1 | Chưa |
 | Routing đa model + cost optimization | Chưa |
 
@@ -50,19 +51,18 @@ V1 **đã implement và có test**. Hardening tiếp theo (config.yaml, provider
 ```bash
 git clone https://github.com/phamhuyti/Al-Team-Plan.git
 cd Al-Team-Plan
-git checkout cursor/ai-team-v1-implementation-0e40
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+bash scripts/cloud-agent-install.sh   # hoặc: python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 cp .env.example .env
-pytest -q
+.venv/bin/pytest -q
 ```
 
 Demo không cần key:
 
 ```bash
-AI_TEAM_PROVIDER=mock ai-team init --name demo --purpose "Demo"
-AI_TEAM_PROVIDER=mock ai-team plan "Thêm authentication"
-AI_TEAM_PROVIDER=mock ai-team implement TASK-001 --yes
+AI_TEAM_PROVIDER=mock .venv/bin/ai-team init /tmp/demo --name demo --purpose "Demo"
+cd /tmp/demo
+AI_TEAM_PROVIDER=mock /path/to/Al-Team-Plan/.venv/bin/ai-team plan "Thêm authentication"
+AI_TEAM_PROVIDER=mock /path/to/Al-Team-Plan/.venv/bin/ai-team implement TASK-001 --yes
 ```
 
 Model thật: gắn `OPENAI_API_KEY` trong `.env`, `AI_TEAM_PROVIDER=openai`, `AI_TEAM_MODEL=gpt-4o`.
@@ -74,6 +74,11 @@ docker compose up --build
 # API :8080
 PROJECT_WORKSPACE=/volume1/projects/my-app docker compose up --build
 ```
+
+### Cursor Cloud Agent
+
+- Cấu hình repo: `.cursor/environment.json` → `bash scripts/cloud-agent-install.sh`
+- Gotchas cho agent: xem `AGENTS.md` (venv, mock provider, `serve` root, CLI ngoài repo)
 
 ---
 
@@ -100,6 +105,9 @@ src/ai_team/
 prompts/                       system prompt theo role
 templates/project/             skeleton khi `ai-team init`
 tests/test_workflow.py         success path V1
+.cursor/environment.json       Cloud Agent install
+scripts/cloud-agent-install.sh
+AGENTS.md                      Cloud Agent gotchas
 ```
 
 Entry points:
@@ -133,19 +141,21 @@ Provider hiện tại: có thể set **provider + model theo role** qua `.ai/con
 
 ## Việc còn đọng (ưu tiên gợi ý)
 
-Làm tiếp theo thứ tự plan: **không** nhảy UI nếu owner chưa yêu cầu.
+V1 + hardening + Cloud env **xong**. Làm tiếp theo thứ tự plan — **không** nhảy UI nếu owner chưa yêu cầu.
 
-1. ~~Đọc `.ai/config.yaml` lúc runtime~~ — xong (`apply_project_config`)
-2. ~~Provider per role~~ — xong (`provider_for_role` + factory)
-3. ~~Tính `cost_usd` thật~~ — xong (`models/pricing.py` + trace)
-4. ~~API approval~~ — xong (`GET/POST /approvals/{id}`, defer mode)
-5. ~~Replay session~~ — xong (`ai-team replay`, `GET /sessions/{id}/replay`)
-6. ~~Researcher web search~~ — xong (`tools/web.py`, MCP `web_search`, backend duckduckgo/mock/off)
+1. ~~Đọc `.ai/config.yaml` lúc runtime~~ — xong
+2. ~~Provider per role~~ — xong
+3. ~~Tính `cost_usd` thật~~ — xong
+4. ~~API approval~~ — xong
+5. ~~Replay session~~ — xong
+6. ~~Researcher web search~~ — xong
+7. ~~Cloud Agent env setup~~ — xong (`AGENTS.md`, install script, `environment.json`)
 
-Sau V1 (plan):
+**Sau V1 (chọn một hướng với owner):**
 
-- Phase 7: dashboard, live chat, task UI, approval UI, cost monitor
-- Phase 8: routing + cost optimization
+- **Phase 7:** dashboard, live chat, task UI, approval UI, cost monitor
+- **Phase 8:** routing + cost optimization
+- **Cứng hóa V1:** integration test live Anthropic/Gemini/OpenRouter; Coder với LLM thật
 - Agent mới: Security, DevOps, Tester, Database, Performance, Documentation, Product Manager, UI/UX
 - MCP V2: GitHub, Postgres, web; Docker MCP đúng nghĩa
 - MCP V3: NAS/Synology, Home Assistant, Grafana, Prometheus
@@ -164,6 +174,7 @@ Sau V1 (plan):
 - Mock khi `provider=openai` mà không có `OPENAI_API_KEY`.
 - Test subprocess dùng `sys.executable`, không giả định binary `python`.
 - `self.debate` bị shadow method — engine tên `debate_engine`.
+- `ai-team serve` cố định project root lúc startup (`cwd` hoặc `--project`).
 
 ---
 
@@ -181,7 +192,7 @@ Sau V1 (plan):
 ## Test cần giữ xanh
 
 ```bash
-pytest -q
+.venv/bin/pytest -q
 ```
 
 Bắt buộc: `tests/test_workflow.py` (plan + implement + audit + debate). Đụng `workflow.py`, permissions, mock provider, git/shell thì chạy file này trước.
@@ -192,19 +203,18 @@ Bắt buộc: `tests/test_workflow.py` (plan + implement + audit + debate). Đ�
 
 - Owner GitHub: `phamhuyti` (Huy)
 - Mục tiêu cuối: “AI Software Company” trên NAS, OpenAI lõi, Cursor/Claude/Gemini/OpenRouter là client/provider dần.
-- Khi nhận việc: hỏi owner muốn **cứng V1** (config.yaml, cost, approval API) hay **nhảy Phase 7/8**.
+- **Bước tiếp theo:** hỏi owner chọn **Phase 7 (Web UI)**, **Phase 8 (routing/cost)**, hay **cứng hóa V1** (live provider tests).
 
 ## Lệnh git hiện tại
 
 ```bash
-# nhánh hardening V1
-git checkout cursor/v1-hardening-config-cost-approvals-85d2
-git pull origin cursor/v1-hardening-config-cost-approvals-85d2
+git checkout main
+git pull origin main
 
-# sau khi sửa
-git add -A
-git commit -m "..."
-git push -u origin cursor/v1-hardening-config-cost-approvals-85d2
+# feature branch mới
+git checkout -b cursor/<ten-mo-ta>-1676
+# ... sửa, commit, push ...
+git push -u origin cursor/<ten-mo-ta>-1676
 ```
 
-PR hardening đang draft. Merge vào `main` khi owner review.
+Nhánh feature cũ (`cursor/ai-team-v1-implementation-0e40`, `cursor/v1-hardening-*`, `cursor/setup-dev-environment-*`) đã merge — có thể xóa trên remote sau khi xác nhận.

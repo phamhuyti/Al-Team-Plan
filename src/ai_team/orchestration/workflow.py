@@ -34,6 +34,7 @@ from ai_team.memory.decisions import DecisionStore
 from ai_team.memory.project import ProjectMemory
 from ai_team.memory.sessions import SessionStore
 from ai_team.models.factory import build_provider
+from ai_team.models.routing import ModelRouter
 from ai_team.orchestration.debate import DebateEngine
 from ai_team.orchestration.judge import JudgeAgent
 from ai_team.security.approvals import ApprovalDenied, ApprovalGate, ApprovalPending, record_tool_call
@@ -79,9 +80,9 @@ class TeamRuntime:
         self.git = GitTools(self.root)
         self.shell = ShellTools(self.root)
         self.web = WebSearchTools(
-            enabled=self.settings.web_search_enabled,
-            backend=self.settings.web_search_backend,
-            max_results=self.settings.web_search_max_results,
+            enabled=self.settings.resolved_web_search_enabled(),
+            backend=self.settings.resolved_web_search_backend(),
+            max_results=self.settings.resolved_web_search_max_results(),
         )
         self.tools = ToolRegistry(self.fs, self.git, self.shell, web=self.web)
         if auto_approve:
@@ -112,6 +113,7 @@ class TeamRuntime:
         self.redteam = RedTeamAgent(build_provider(self.settings, "redteam"), extra.get("redteam", ""))
         self.judge = JudgeAgent(build_provider(self.settings, "manager"))
         self.debate_engine = DebateEngine(self.judge, rounds=self.settings.debate_rounds)
+        self.router = ModelRouter(self.settings)
         self.project_row = self._ensure_project()
 
     def _db_url(self) -> str:
@@ -190,6 +192,54 @@ class TeamRuntime:
             s.commit()
             task.status = status
         self.memory.upsert_task(task.task_key, task.title, status, task.description)
+
+    def _refresh_agent_providers(self, prompt: str, session_cost_usd: float = 0.0, tracer: Tracer | None = None) -> dict[str, Any]:
+        """Apply Phase 8 routing and rebuild agent providers for this session step."""
+        snapshot = self.router.routing_snapshot(prompt, session_cost_usd)
+        for role, route in snapshot["routes"].items():
+            provider = build_provider(
+                self.settings,
+                role,
+                provider_override=route["provider"],
+                model_override=route["model"],
+            )
+            agent = getattr(self, role, None)
+            if agent is not None:
+                agent.model = provider
+        self._seed_agents()
+        if tracer is not None:
+            tracer.emit("routing", actor="manager", payload=snapshot)
+        return snapshot
+
+    def project_cost_summary(self) -> dict[str, Any]:
+        from ai_team.memory.database import Session, TraceEvent
+
+        with self.db.session() as s:
+            session_ids = [
+                row.id
+                for row in s.query(Session).filter(Session.project_id == self.project_row.id).all()
+            ]
+            if not session_ids:
+                return {
+                    "sessions": 0,
+                    "events": 0,
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                    "cost_usd": 0.0,
+                    "pending_approvals": len(self.list_approvals(status="pending")),
+                }
+            rows = s.query(TraceEvent).filter(TraceEvent.session_id.in_(session_ids)).all()
+        tokens_in = sum(r.tokens_in or 0 for r in rows)
+        tokens_out = sum(r.tokens_out or 0 for r in rows)
+        cost_usd = sum(float(r.cost_usd or 0.0) for r in rows)
+        return {
+            "sessions": len(session_ids),
+            "events": len(rows),
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost_usd": round(cost_usd, 8),
+            "pending_approvals": len(self.list_approvals(status="pending")),
+        }
 
     def list_agents(self) -> list[dict[str, str]]:
         with self.db.session() as s:
@@ -356,7 +406,7 @@ class TeamRuntime:
         }
 
     def _web_evidence(self, query: str, tracer: Tracer | None = None) -> list[dict[str, str]]:
-        if not self.settings.web_search_enabled:
+        if not self.settings.resolved_web_search_enabled():
             return []
         hits = self.web.search(query)
         if tracer is not None:
@@ -375,7 +425,7 @@ class TeamRuntime:
                 tracer.session_id,
                 "researcher",
                 "web_search",
-                {"query": query, "max_results": self.settings.web_search_max_results},
+                {"query": query, "max_results": self.settings.resolved_web_search_max_results()},
                 str(hits)[:20_000],
                 RiskLevel.SAFE,
                 True,
@@ -386,6 +436,7 @@ class TeamRuntime:
         session = self.sessions.start(self.project_row.id, kind="ask")
         tracer = Tracer(self.db, session.id)
         tracer.emit("task", actor="user", payload={"request": request})
+        routing = self._refresh_agent_providers(request, tracer=tracer)
         context = self.context.build(request)
         plan = await self.manager.plan(request, context, tracer)
         architect = await self.architect.run(request, context, tracer)
@@ -425,12 +476,14 @@ class TeamRuntime:
                 "research": research.model_dump(),
                 "web_search": web_hits,
                 "decision": decision.model_dump(),
+                "routing": routing,
             },
         )
 
     async def research(self, topic: str) -> WorkflowResult:
         session = self.sessions.start(self.project_row.id, kind="research")
         tracer = Tracer(self.db, session.id)
+        routing = self._refresh_agent_providers(topic, tracer=tracer)
         context = self.context.build(topic)
         web_hits = self._web_evidence(topic, tracer)
         finding = await self.researcher.run(
@@ -445,12 +498,13 @@ class TeamRuntime:
             "",
             session.id,
             finding.recommendation,
-            {**finding.model_dump(), "web_search": web_hits},
+            {**finding.model_dump(), "web_search": web_hits, "routing": routing},
         )
 
     async def debate(self, question: str, force: bool = True) -> WorkflowResult:
         session = self.sessions.start(self.project_row.id, kind="debate")
         tracer = Tracer(self.db, session.id)
+        routing = self._refresh_agent_providers(question, tracer=tracer)
         context = self.context.build(question)
         proposals, verdict, ran = await self.debate_engine.debate(
             [self.architect, self.researcher, self.coder],
@@ -485,6 +539,7 @@ class TeamRuntime:
                 "proposals": [p.model_dump() for p in proposals],
                 "verdict": verdict.model_dump() if verdict else None,
                 "debated": ran,
+                "routing": routing,
             },
         )
 
@@ -493,6 +548,7 @@ class TeamRuntime:
         session = self.sessions.start(self.project_row.id, kind="plan", task_id=task.id)
         tracer = Tracer(self.db, session.id, task.id)
         tracer.emit("task", actor="user", payload={"request": request, "task_key": task.task_key})
+        routing = self._refresh_agent_providers(request, tracer=tracer)
         context = self.context.build(request)
         manager_plan = await self.manager.plan(request, context, tracer)
         architect = await self.architect.run(request, context, tracer)
@@ -560,6 +616,7 @@ class TeamRuntime:
                 "redteam": red.model_dump(),
                 "decision": decision.model_dump(),
                 "status": status,
+                "routing": routing,
             },
         )
 
@@ -571,7 +628,9 @@ class TeamRuntime:
         tracer = Tracer(self.db, session.id, task.id)
         tracer.emit("task", actor="manager", payload={"task_key": task_key, "title": task.title})
         self.set_status(task, "implementing")
-        context = self.context.build(f"{task.task_key} {task.title} {task.description}")
+        prompt = f"{task.task_key} {task.title} {task.description}"
+        routing = self._refresh_agent_providers(prompt, tracer=tracer)
+        context = self.context.build(prompt)
 
         branch = _branch_name(task.task_key, task.title, self.settings.git_branch_prefix)
         if self.git.is_repo():
@@ -700,6 +759,7 @@ class TeamRuntime:
             "redteam": last_red.model_dump() if last_red else None,
             "approved": approved,
             "cost": self.session_cost(session.id),
+            "routing": routing,
         }
         if pending_approval:
             details["pending_approval"] = pending_approval

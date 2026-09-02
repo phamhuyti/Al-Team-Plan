@@ -1,0 +1,195 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --panel: #171d25;
+  --border: #2a3441;
+  --text: #e7edf5;
+  --muted: #8b9bb0;
+  --accent: #4f8cff;
+  --accent-2: #2dd4bf;
+  --danger: #f87171;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #152033, var(--bg) 45%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15, 20, 25, 0.9);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand h1 { margin: 0; font-size: 1.25rem; }
+.brand p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.stats {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pill {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+.tab.active {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+main { padding: 1rem 1.25rem 2rem; max-width: 1200px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+.grid.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 900px) {
+  .grid.two { grid-template-columns: 1fr; }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.card h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th, td {
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th { color: var(--muted); font-weight: 600; }
+
+.form-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+input, textarea, select, button {
+  font: inherit;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: #0c1117;
+  color: var(--text);
+  padding: 0.5rem 0.65rem;
+}
+textarea { flex: 1; min-width: 220px; resize: vertical; }
+button {
+  background: linear-gradient(180deg, #5b95ff, var(--accent));
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+button.secondary {
+  background: #1f2937;
+  border: 1px solid var(--border);
+}
+button.danger { background: linear-gradient(180deg, #fb7185, var(--danger)); }
+
+.checkbox { display: flex; gap: 0.35rem; align-items: center; color: var(--muted); font-size: 0.85rem; }
+
+.chat-log {
+  min-height: 220px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  background: #0c1117;
+}
+.msg { margin-bottom: 0.65rem; }
+.msg .role { color: var(--accent-2); font-size: 0.75rem; text-transform: uppercase; }
+.msg.user .role { color: var(--accent); }
+.msg .body { white-space: pre-wrap; }
+
+.stream {
+  margin-top: 0.75rem;
+  max-height: 200px;
+  overflow: auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.mono, pre.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+.metric {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #0c1117;
+}
+.metric .label { color: var(--muted); font-size: 0.75rem; }
+.metric .value { font-size: 1.2rem; font-weight: 700; margin-top: 0.25rem; }
+
+.list .item {
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0;
+}
+.muted { color: var(--muted); }
+.status-ok { color: var(--ok); }
+.status-warn { color: var(--warn); }
+.status-bad { color: var(--danger); }

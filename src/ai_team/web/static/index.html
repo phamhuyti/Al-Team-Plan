@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI-Team Dashboard</title>
+  <link rel="stylesheet" href="/ui/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>AI-Team</h1>
+      <p id="project-path">Đang tải project…</p>
+    </div>
+    <div class="stats" id="header-stats"></div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="tasks">Tasks</button>
+    <button class="tab" data-tab="chat">Live Chat</button>
+    <button class="tab" data-tab="approvals">Approvals</button>
+    <button class="tab" data-tab="cost">Cost Monitor</button>
+  </nav>
+
+  <main>
+    <section id="panel-dashboard" class="panel active">
+      <div class="grid two">
+        <article class="card">
+          <h2>Agents</h2>
+          <div id="agents-table" class="table-wrap"></div>
+        </article>
+        <article class="card">
+          <h2>Routing (Phase 8)</h2>
+          <pre id="routing-preview" class="mono">—</pre>
+        </article>
+      </div>
+      <article class="card">
+        <h2>Recent Sessions</h2>
+        <div id="sessions-table" class="table-wrap"></div>
+      </article>
+      <article class="card">
+        <h2>Decisions</h2>
+        <div id="decisions-list" class="list"></div>
+      </article>
+    </section>
+
+    <section id="panel-tasks" class="panel">
+      <article class="card">
+        <h2>Create Task</h2>
+        <form id="task-form" class="form-row">
+          <input id="task-title" type="text" placeholder="Tiêu đề task" required />
+          <input id="task-desc" type="text" placeholder="Mô tả (tuỳ chọn)" />
+          <button type="submit">Tạo</button>
+        </form>
+      </article>
+      <article class="card">
+        <h2>Tasks</h2>
+        <div id="tasks-table" class="table-wrap"></div>
+      </article>
+    </section>
+
+    <section id="panel-chat" class="panel">
+      <article class="card chat-card">
+        <div class="form-row">
+          <select id="chat-mode">
+            <option value="ask">Ask (Manager)</option>
+            <option value="research">Research</option>
+            <option value="debate">Debate</option>
+            <option value="plan">Plan</option>
+          </select>
+          <label class="checkbox"><input id="chat-yes" type="checkbox" checked /> Auto-approve</label>
+        </div>
+        <div id="chat-log" class="chat-log"></div>
+        <form id="chat-form" class="form-row">
+          <textarea id="chat-input" rows="3" placeholder="Nhập yêu cầu cho team…" required></textarea>
+          <button type="submit">Gửi</button>
+        </form>
+        <div id="chat-stream" class="stream mono"></div>
+      </article>
+    </section>
+
+    <section id="panel-approvals" class="panel">
+      <article class="card">
+        <div class="form-row">
+          <h2>Pending Approvals</h2>
+          <button id="refresh-approvals" type="button">Làm mới</button>
+        </div>
+        <div id="approvals-table" class="table-wrap"></div>
+      </article>
+    </section>
+
+    <section id="panel-cost" class="panel">
+      <article class="card">
+        <h2>Project Cost Summary</h2>
+        <div id="cost-summary" class="metrics"></div>
+      </article>
+      <article class="card">
+        <h2>Session Costs</h2>
+        <div id="session-costs" class="table-wrap"></div>
+      </article>
+    </section>
+  </main>
+
+  <template id="tpl-empty"><p class="muted">Không có dữ liệu.</p></template>
+  <script src="/ui/app.js" type="module"></script>
+</body>
+</html>

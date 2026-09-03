@@ -2,9 +2,11 @@
 
 Bộ tài liệu chính thức cho **AI-Team**: multi-agent orchestrator chạy CLI, HTTP API, Web UI và MCP trên NAS/Docker.
 
-> README ngắn gọn cho người mới: [../README.md](../README.md)  
-> Handoff cho agent/dev tiếp theo: [../HANDOFF.md](../HANDOFF.md)  
-> Gotchas Cursor Cloud: [../AGENTS.md](../AGENTS.md)
+> **Trang giới thiệu trực quan (GitHub Pages):** [index.html](index.html) — sau khi bật Pages sẽ có tại `https://phamhuyti.github.io/Al-Team-Plan/`  
+> README ngắn: [../README.md](../README.md)  
+> Handoff agent/dev: [../HANDOFF.md](../HANDOFF.md)  
+> Gotchas Cursor Cloud: [../AGENTS.md](../AGENTS.md)  
+> **Guidelines:** [guidelines.md](guidelines.md)
 
 ---
 
